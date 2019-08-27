@@ -22,8 +22,8 @@ void *process(void *arg)
 
 int main()
 {
-	Logger::getInstance()->setDevice(Logger::FILE);
-	Logger::getInstance()->setEnableLevel(Logger::CRITICAL);
+//	Logger::getInstance()->setDevice(Logger::FILE);
+//	Logger::getInstance()->setEnableLevel(Logger::CRITICAL);
 	// 1. 创建线程池对象
 	ThreadPool pool(2, 8);
 	int array[] = { 1,2,3,4,5,6,7,8,9,10 };
