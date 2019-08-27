@@ -44,8 +44,8 @@ int SecKeyShm::shmWrite(NodeSHMInfo * pNodeInfo)
 		// pNode依次指向每个节点的首地址
 		pNode = pAddr + i;
 		cout << i << endl;
-		cout << pNode->clientID << ", " << pNodeInfo->clientID << endl;
-		cout << pNode->serverID << ", " << pNodeInfo->serverID << endl;
+		cout << "clientID 比较: " << pNode->clientID << ", " << pNodeInfo->clientID << endl;
+		cout << "serverID 比较: " << pNode->serverID << ", " << pNodeInfo->serverID << endl;
 		cout << endl;
 		if (strcmp(pNode->clientID, pNodeInfo->clientID) == 0 &&
 			strcmp(pNode->serverID, pNodeInfo->serverID) == 0)
@@ -104,8 +104,8 @@ NodeSHMInfo SecKeyShm::shmRead(string clientID, string serverID)
 	{
 		pNode = pAddr + i;
 		cout << i << endl;
-		cout << pNode->clientID << ", " << clientID.data() << endl;
-		cout << pNode->serverID << ", " << serverID.data() << endl;
+		cout << "clientID 比较: " << pNode->clientID << ", " << clientID.data() << endl;
+		cout << "serverID 比较: " << pNode->serverID << ", " << serverID.data() << endl;
 		if (strcmp(pNode->clientID, clientID.data()) == 0 &&
 			strcmp(pNode->serverID, serverID.data()) == 0)
 		{
