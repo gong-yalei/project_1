@@ -4,6 +4,7 @@
 #include <string>
 #include <pthread.h>
 #include <unistd.h>
+#include <signal.h>
 #include "TaskQueue.h"
 using namespace std;
 
@@ -11,8 +12,13 @@ const int DEFAULT_TIME = 10;                /*10s检测一次*/
 const int MIN_WAIT_TASK_NUM = 10;           /*如果queue_size > MIN_WAIT_TASK_NUM 添加新的线程到线程池*/
 const int DEFAULT_THREAD_VARY = 10;         /*每次创建和销毁线程的个数*/
 
-ThreadPool::ThreadPool(int min, int max, TaskQueue* queue)
+ThreadPool::ThreadPool(int min, int max)
 {
+	// 实例化任务队列
+	task_queue = new TaskQueue;
+	// 获取单例日志对象
+	m_log = Logger::getInstance();
+
 	do 
 	{
 		min_thr_num = min;
@@ -24,7 +30,7 @@ ThreadPool::ThreadPool(int min, int max, TaskQueue* queue)
 		threads = new pthread_t[sizeof(pthread_t) * max_thr_num];
 		if (threads == NULL) 
 		{
-			printLog("malloc threads fail");
+			m_log->Log("malloc threads fail", __FILE__, __LINE__);
 			break;
 		}
 		memset(threads, 0, sizeof(pthread_t) * max_thr_num);
@@ -32,10 +38,9 @@ ThreadPool::ThreadPool(int min, int max, TaskQueue* queue)
 		/* 初始化互斥琐、条件变量 */
 		if (pthread_mutex_init(&(lock), NULL) != 0
 			|| pthread_mutex_init(&(thread_counter), NULL) != 0
-			|| pthread_cond_init(&(queue_not_empty), NULL) != 0
-			|| pthread_cond_init(&(queue_not_full), NULL) != 0)
+			|| pthread_cond_init(&(queue_not_empty), NULL) != 0)
 		{
-			printLog("init the lock or cond fail");
+			m_log->Log("init the lock or cond fail", __FILE__, __LINE__);
 			break;
 		}
 
@@ -43,20 +48,23 @@ ThreadPool::ThreadPool(int min, int max, TaskQueue* queue)
 		for (int i = 0; i < min_thr_num; i++) 
 		{
 			// 创建并启动工作的线程
-			pthread_create(&(threads[i]), NULL, threadWorking, this);
+			pthread_create(&threads[i], NULL, threadWorking, this);
 			string log = "start thread: " + to_string((unsigned int)threads[i]);
-			printLog(log);
+			m_log->Log(log, __FILE__, __LINE__);
 		}
 		// 创建并启动管理者线程
-		pthread_create(&(adjust_tid), NULL, threadWorking, this);
+		pthread_create(&(adjust_tid), NULL, threadManager, this);
 	} while (0);
-	task_queue = queue;
 }
 
 
 ThreadPool::~ThreadPool()
 {
 	// 释放资源
+	if (task_queue)
+	{
+		delete task_queue;
+	}
 	// 销毁锁/条件变量
 }
 
@@ -73,7 +81,7 @@ void * ThreadPool::threadWorking(void * arg)
 		while (pool->task_queue->taskNumber() == 0) 
 		{
 			string log = "thread:" + to_string((unsigned int)pthread_self()) + " is waiting";
-			pool->printLog(log);
+			pool->m_log->Log(log, __FILE__, __LINE__);
 			pthread_cond_wait(&(pool->queue_not_empty), &(pool->lock));
 
 			/*清除指定数目的空闲线程，如果要结束的线程个数大于0，结束线程*/
@@ -84,8 +92,8 @@ void * ThreadPool::threadWorking(void * arg)
 				/*如果线程池里线程个数大于最小值时可以结束当前线程*/
 				if (pool->live_thr_num > pool->min_thr_num) 
 				{
-					string log = "thread:" + to_string((unsigned int)pthread_self()) + " is exiting";
-					pool->printLog(log);
+					log = "thread:" + to_string((unsigned int)pthread_self()) + " is exiting";
+					pool->m_log->Log(log, __FILE__, __LINE__);
 					pool->live_thr_num--;
 					pthread_mutex_unlock(&(pool->lock));
 					pthread_exit(NULL);
@@ -96,10 +104,9 @@ void * ThreadPool::threadWorking(void * arg)
 
 		/*从任务队列里获取任务, 是一个出队操作*/
 		Task task = pool->task_queue->takeTask();
-		/*通知可以有新的任务添加进来*/
-		pthread_cond_broadcast(&(pool->queue_not_full));
 		/*执行任务*/
-		printf("thread 0x%x start working\n", (unsigned int)pthread_self());
+		string log = "thread:" + to_string((unsigned int)pthread_self()) + " is start working...";
+		pool->m_log->Log(log, __FILE__, __LINE__);
 		pthread_mutex_lock(&(pool->thread_counter));                            /*忙状态线程数变量琐*/
 		pool->busy_thr_num++;                                                   /*忙状态线程数+1*/
 		pthread_mutex_unlock(&(pool->thread_counter));
@@ -108,7 +115,8 @@ void * ThreadPool::threadWorking(void * arg)
 		//task.function(task.arg);                                              /*执行回调函数任务*/
 
 		/*任务结束处理*/
-		printf("thread 0x%x end working\n", (unsigned int)pthread_self());
+		log = "thread:" + to_string((unsigned int)pthread_self()) + " is end working...";
+		pool->m_log->Log(log, __FILE__, __LINE__);
 		pthread_mutex_lock(&(pool->thread_counter));
 		pool->busy_thr_num--;                                       /*处理掉一个任务，忙状态数线程数-1*/
 		pthread_mutex_unlock(&(pool->thread_counter));
@@ -125,7 +133,7 @@ void * ThreadPool::threadManager(void * arg)
 	{
 		sleep(DEFAULT_TIME);                                    /*定时 对线程池管理*/
 		pthread_mutex_lock(&(pool->lock));
-		int queue_size = pool->task_queue->taskNumber();        /* 关注 任务数 */
+		size_t queue_size = pool->task_queue->taskNumber();        /* 关注 任务数 */
 		int live_thr_num = pool->live_thr_num;                  /* 存活 线程数 */
 		pthread_mutex_unlock(&(pool->lock));
 
@@ -175,6 +183,7 @@ void * ThreadPool::threadManager(void * arg)
 }
 
 /*
+  #include <signal.h>
   int pthread_kill(pthread_t threadId,int signal);
 	1. 该函数可以用于向指定的线程发送信号：
 	2. 如果线程内不对信号进行处理，则调用默认的处理程式，如SIGQUIT会退出终止线程，
@@ -195,4 +204,12 @@ bool ThreadPool::threadIsAlive(pthread_t tid)
 		return false;
 	}
 	return true;
+}
+
+void ThreadPool::addPoolTask(Task & task)
+{
+	/*添加任务到任务队列里*/
+	task_queue->addTask(task);
+	/*添加完任务后，队列不为空，唤醒线程池中 等待处理任务的线程*/
+	pthread_cond_signal(&queue_not_empty);
 }

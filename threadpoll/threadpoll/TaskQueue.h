@@ -1,6 +1,8 @@
 ﻿#pragma once
 #include <queue>
 #include <pthread.h>
+#include <string>
+#include <iostream>
 #define LOG
 // 任务结构体
 struct Task
@@ -19,14 +21,14 @@ typedef void* (*callback)(void*);
 class TaskQueue
 {
 public:
-	TaskQueue(int maxNode);
+	TaskQueue();
 	~TaskQueue();
 	// 往任务队列中添加任务
-	bool addTask(Task &task);
-	bool addTask(callback func, void* arg);
+	void addTask(Task &task);
+	void addTask(callback func, void* arg);
 
 	// 获取当前队列中的任务数量
-	inline int taskNumber()
+	inline size_t taskNumber()
 	{
 		return m_queue.size();
 	}
@@ -38,13 +40,12 @@ public:
 	inline void printLog(std::string str)
 	{
 #ifdef LOG
-		cout << "File[" << __FILE__ << "], Line[" << __LINE__
-			<< "], Infomation[" << str << "]" << endl;
+		std::cout << "File[" << __FILE__ << "], Line[" << __LINE__
+			<< "], Infomation[" << str << "]" << std::endl;
 #endif
 	}
 
 private:
-	int m_maxNode;	// 记录当前队列允许存储的最大节点数
 	pthread_mutex_t m_mutex;	// 互斥锁
 	std::queue<Task> m_queue;
 };

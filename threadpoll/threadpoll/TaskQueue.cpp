@@ -2,8 +2,7 @@
 #include <iostream>
 using namespace std;
 
-TaskQueue::TaskQueue(int maxNode) : 
-	m_maxNode(maxNode)
+TaskQueue::TaskQueue() 
 {
 	pthread_mutex_init(&m_mutex, NULL);
 }
@@ -14,32 +13,21 @@ TaskQueue::~TaskQueue()
 	pthread_mutex_destroy(&m_mutex);
 }
 
-bool TaskQueue::addTask(Task & task)
+void TaskQueue::addTask(Task & task)
 {
-	if (m_queue.size() < m_maxNode)
-	{
-		pthread_mutex_lock(&m_mutex);
-		m_queue.push(task);
-		pthread_mutex_unlock(&m_mutex);
-		return true;
-	}
-	printLog("队列已满, 无法添加新任务");
-	return false;
+	pthread_mutex_lock(&m_mutex);
+	m_queue.push(task);
+	pthread_mutex_unlock(&m_mutex);
 }
 
-bool TaskQueue::addTask(callback func, void * arg)
+void TaskQueue::addTask(callback func, void * arg)
 {
-	if (m_queue.size() < m_maxNode)
-	{
-		pthread_mutex_lock(&m_mutex);
-		Task t;
-		t.arg = arg;
-		t.function = func;
-		m_queue.push(t);
-		pthread_mutex_unlock(&m_mutex);
-		return true;
-	}
-	return false;
+	pthread_mutex_lock(&m_mutex);
+	Task t;
+	t.arg = arg;
+	t.function = func;
+	m_queue.push(t);
+	pthread_mutex_unlock(&m_mutex);
 }
 
 Task TaskQueue::takeTask()
